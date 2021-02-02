@@ -10,15 +10,15 @@ procman:
       min: 1234m
       max: 1234m
       meta: 1234m
-    gc: serial/parallel/cms/g1
+    gc: g1
     classpath: 
       - path
       - path*
-      - jar
+      - some.jar
     sysprops:
       - pl.test=true
       - awt.headless=1
     main: some.main.class.Main
     args: ['a','b','c','d']
-    streamout: /path/to/dir
+    streamout: /tmp/out
      

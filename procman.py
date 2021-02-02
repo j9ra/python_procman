@@ -2,6 +2,7 @@
 
 import yaml
 import os.path
+import re
 
 class Config:
     def __init__(self, config_path):
@@ -26,8 +27,16 @@ class JavaConfig(Config):
 
     def __init__(self, java_params):
         self.params = java_params
-        self.validators = { 'vmpath': self._check_path,
-                'debug': self._check_debug}
+        self.validators = { 
+            'vmpath': self._check_path,
+            'debug': self._check_debug,
+            'memory': self._check_memory,
+            'gc': self._check_gc,
+            'classpath': self._check_classpath,
+            'sysprops': self._check_sysprops,
+            'main': self._check_main,
+            'args': self._check_args,
+            'streamout': self._check_streamout}
 
     def validated(self):
         self._check_required()
@@ -48,6 +57,38 @@ class JavaConfig(Config):
     def _check_debug(self, value):
         if not (value == True or value == False):
             raise InvalidConfigException("Invalid debug value: [%s]" % value)
+
+    def _check_memory(self, value):
+        types = ("min","max","meta")
+        for t,v in value.items():
+            if not (t in types and re.fullmatch(r"\d+(k|m|g)",str(v))):
+                raise InvalidConfigException("Invalid mem value: [%s=%s]" % (t,v))
+
+    def _check_gc(self, value):
+        if not value in ("serial","parallel","cms","g1"):
+            raise InvalidConfigException("Invalid gc value: [%s]" % value)
+
+    def _check_classpath(self, value):
+        for c in value:
+            if not (c and re.fullmatch(r"[\S]+", c)):
+                raise InvalidConfigException("Invalid classpath: [%s]" % c)
+
+    def _check_sysprops(self, value):
+        for p in value:
+            if len(p.split("=")) != 2:
+                raise InvalidConfigException("Invalid sysprop: [%s]" % p)
+
+    def _check_main(self, value):
+        if not re.fullmatch(r"(?:\w+\.)*\w+", value):
+            raise InvalidConfigException("Invalid main: [%s]" % value)
+
+    def _check_args(self, value):
+        if not (value and type(value) is list):
+            raise InvalidConfigException("Invalid args: [%s]" % value)
+
+    def _check_streamout(self, value):
+        if os.path.isfile(value) and not os.access(value,os.W_OK):
+            raise InvalidConfigException("Streamout not writeable: [%s]" % value)
     
 class InvalidConfigException(Exception):
     pass
