@@ -3,6 +3,7 @@
 import yaml
 import os.path
 import re
+import glob
 
 class Config:
     def __init__(self, config_path):
@@ -21,7 +22,8 @@ class Config:
 
     def java_config(self, service_name):
         jc = JavaConfig(self.services[service_name]["java"])
-        return jc.validated()
+        jc.validated() # raise on invalid conf
+        return jc
 
 class JavaConfig(Config):
 
@@ -37,6 +39,25 @@ class JavaConfig(Config):
             'main': self._check_main,
             'args': self._check_args,
             'streamout': self._check_streamout}
+
+    @property
+    def vmpath(self):
+        return self.params.get("vmpath","java")
+            
+    @property
+    def classpath(self):
+        cp_tab = []
+        # globbing 
+        for c in self.params.get("classpath"):
+            if re.search(r"[\?\*\[\]]", c):
+                for gg in glob.glob(c):
+                    cp_tab.append(gg)  
+            else: 
+                cp_tab.append(c)
+        return cp_tab
+
+    def __getattr__(self, item):
+        return self.params.get(item)
 
     def validated(self):
         self._check_required()
@@ -93,9 +114,60 @@ class JavaConfig(Config):
 class InvalidConfigException(Exception):
     pass
 
+class JLauncher:
+
+    def __init__(self, java_config):
+        self.config = java_config
+
+    def build_command(self):
+        cmd_line = []
+        # binary path
+        cmd_line.append(self.config.vmpath)
+        # debug
+        if self.config.debug == True:
+            cmd_line.append("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y")
+        # memory
+        if "min" in self.config.memory:
+            cmd_line.append("-Xms%s" % self.config.memory.get("min"))
+        if "max" in self.config.memory:
+            cmd_line.append("-Xmx%s" % self.config.memory.get("max"))
+        if "meta" in self.config.memory:
+            cmd_line.append("-XX:MaxMetaspaceSize=%s" % self.config.memory.get("meta"))
+        # gc
+        if self.config.gc == "serial":
+            cmd_line.append("-XX:+UseSerialGC")
+        elif self.config.gc == "parallel":
+            cmd_line.append("-XX:+UseParallelGC")
+        elif self.config.gc == "cms":
+            cmd_line.append("-XX:+UseConcMarkSweepGC")
+        elif self.config.gc == "g1":
+            cmd_line.append("-XX:+UseG1GC")
+        # sysprops
+        for p in self.config.sysprops:
+            cmd_line.append("-D%s" % p)
+        # classpath
+        cmd_line.append("-classpath %s" % os.pathsep.join(self.config.classpath))
+        # main
+        cmd_line.append(self.config.main)
+        # args
+        for a in self.config.args:
+            cmd_line.append(a)
+
+
+        print("Cmdline: %s" % " ".join(cmd_line))
+
+
 if __name__ == "__main__":
     conf = Config("services.yaml")
     conf.parse_yaml()
     print("services: ", conf.service_list())
-    conf.java_config('echo')
+    jc = conf.java_config('echo')
+    print (dir(jc))
+    print ("debug:",jc.debug)
+    print ("main:",jc.main)
+    print ("bogus:",jc.bogus)
+    print ("vmpath:",jc.vmpath)
+    
+    jl = JLauncher(jc)
+    jl.build_command()
 
