@@ -6,21 +6,25 @@ import re
 import glob
 
 class Config:
-    def __init__(self, config_path):
-        self.path = config_path
+    def __init__(self):
         self.services = {}
 
-    def parse_yaml(self):
-        with open(self.path) as cf:
+    def parse_yaml(self, config_path):
+        with open(config_path) as cf:
             docs = yaml.load_all(cf, Loader=yaml.Loader)
-            for doc in docs:
-                self.services[doc["name"]]=doc["procman"]
-                # fixme add try on keys
+            try:
+                for doc in docs:
+                    self.services[doc["name"]]=doc["procman"]
+            except KeyError as exc:
+                print("Not procman Config loaded!") 
+                raise InvalidConfigException("Format error") from exc
 
     def service_list(self):
         return list(self.services.keys())
 
     def java_config(self, service_name):
+        if not "java" in self.services[service_name]:
+            return None
         jc = JavaConfig(self.services[service_name]["java"])
         jc.validated() # raise on invalid conf
         return jc
@@ -158,8 +162,8 @@ class JLauncher:
 
 
 if __name__ == "__main__":
-    conf = Config("services.yaml")
-    conf.parse_yaml()
+    conf = Config()
+    conf.parse_yaml("services.yaml")
     print("services: ", conf.service_list())
     jc = conf.java_config('echo')
     print (dir(jc))
