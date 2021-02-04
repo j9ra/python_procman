@@ -5,20 +5,18 @@ name: echo
 procman:
   java:
     vmpath: /usr/bin/java
-    debug: true
+    debug: false
     memory:
-      min: 1234m
-      max: 1234m
-      meta: 1234m
+      min: 128m
+      max: 256m
+      meta: 128m
     gc: g1
     classpath: 
-      - path
-      - path*
-      - some.jar
+      - "*.jar"
     sysprops:
       - pl.test=true
       - awt.headless=1
-    main: some.main.class.Main
-    args: ['a','b','c','d']
-    streamout: /tmp/out
+    main: program1.Main
+    args: ['a']
+    streamout: /tmp/out$$
      

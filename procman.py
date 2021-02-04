@@ -4,6 +4,8 @@ import yaml
 import os.path
 import re
 import glob
+import datetime
+import subprocess
 
 class Config:
     def __init__(self):
@@ -122,6 +124,8 @@ class JLauncher:
 
     def __init__(self, java_config):
         self.config = java_config
+        self.proc_handle = None
+        self.stream_out = None
 
     def build_command(self):
         cmd_line = []
@@ -149,29 +153,120 @@ class JLauncher:
         # sysprops
         for p in self.config.sysprops:
             cmd_line.append("-D%s" % p)
-        # classpath
-        cmd_line.append("-classpath %s" % os.pathsep.join(self.config.classpath))
+        # classpath, must be 2 seperate args!
+        cmd_line.append("-classpath")
+        cmd_line.append(os.pathsep.join(self.config.classpath))
         # main
         cmd_line.append(self.config.main)
         # args
         for a in self.config.args:
             cmd_line.append(a)
 
-
+        print("cmdline tab", cmd_line)
         print("Cmdline: %s" % " ".join(cmd_line))
+        return cmd_line
+
+    def redirect_streamout(self):
+        if not self.config.streamout:
+            return None
+        # make output file name, more uniq
+        if self.config.streamout.endswith("$$"):
+            basename = self.config.streamout[:-2]
+            suffix = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = "_".join([basename, suffix])
+        else:
+            filename = self.config.streamout
+        self.stream_out = open(filename, mode="a")
+        return self.stream_out
+        
+    def run(self):
+        if self.is_running():
+            print("Proc allready running")
+            return None
+
+        cmd = self.build_command()
+        out_file = self.redirect_streamout()
+        try:
+            if out_file: 
+                # redirect output stream
+                self.proc_handle = subprocess.Popen(cmd,
+                    stdout=out_file, stderr=subprocess.STDOUT)
+            else:
+                self.proc_handle = subprocess.Popen(cmd)
+        except OSError:
+            print("Failed to run proc")
+            return None
+
+        print("Proc PID %d" % self.proc_handle.pid)
+        return self.proc_handle.pid
+
+    def stop(self):
+        if self.is_running():
+            # send TERM and wait
+            self.proc_handle.terminate()
+            self.proc_handle.wait()
+            # clear stream output handle
+            if self.redirect_streamout:
+                self.stream_out.close()
+            return self.proc_handle.returncode
+
+    def is_running(self):
+        if not self.proc_handle:
+            return False
+        # check if dead, otherwise it still lives
+        status = self.proc_handle.poll()
+        return True if status==None else False
+
+class ProcessManager:
+
+    def __init__(self, work_dir, config_file="services.yaml"):
+        os.chdir(work_dir)
+        self.curr_dir = os.getcwd()
+        self.service_config_file = config_file
+        self.services_registry = {}
+        self._configure()
+
+    def _configure(self):
+        self.conf = Config()
+        self.conf.parse_yaml(self.service_config_file)
+        for serv in self.conf.service_list():
+            # maybe in future support others then Java, plug here!
+            java_config = self.conf.java_config(serv)
+            java_launcher = JLauncher(java_config)
+            # registry by service name
+            self.services_registry[serv] = java_launcher
+
+    def list(self):
+        return self.conf.service_list()
+
+    def start(self, service_name):
+        if not service_name in self.services_registry:
+            return None
+        return self.services_registry[service_name].run()
+
+    def stop(self, service_name):
+        if not service_name in self.services_registry:
+            return None
+        return self.services_registry[service_name].stop()
+
+    def status(self, service_name):
+        if not service_name in self.services_registry:
+            return None
+        return self.services_registry[service_name].is_running()
+      
 
 
 if __name__ == "__main__":
-    conf = Config()
-    conf.parse_yaml("services.yaml")
-    print("services: ", conf.service_list())
-    jc = conf.java_config('echo')
-    print (dir(jc))
-    print ("debug:",jc.debug)
-    print ("main:",jc.main)
-    print ("bogus:",jc.bogus)
-    print ("vmpath:",jc.vmpath)
     
-    jl = JLauncher(jc)
-    jl.build_command()
+    proc_man = ProcessManager(os.getcwd())
+    print(proc_man.list())
 
+    proc_man.start('echo')
+    import time
+    time.sleep(10)
+    print("Is running? ", proc_man.status('echo'))
+    time.sleep(10)
+    print("Stopping")
+    print("returncode",proc_man.stop('echo'))
+    print("Stoped")
+    print("Is running? ", proc_man.status('echo'))
