@@ -6,6 +6,10 @@ import re
 import glob
 import datetime
 import subprocess
+import logging
+import logging.config
+
+logger = logging.getLogger('procman')
 
 class Config:
     def __init__(self):
@@ -68,9 +72,11 @@ class JavaConfig(Config):
     def validated(self):
         self._check_required()
         for p in self.params:
-            print ("Param: " + p    )
+            logger.debug("Validating config param [%s]" % p)
             if p in self.validators:
                 self.validators[p](self.params[p])
+            else:
+                logger.warn("unrecognized config param [%s]", p)
 
     def _check_required(self):
         for r in ('classpath','main'):
@@ -162,14 +168,14 @@ class JLauncher:
         for a in self.config.args:
             cmd_line.append(a)
 
-        print("cmdline tab", cmd_line)
-        print("Cmdline: %s" % " ".join(cmd_line))
+        logger.debug("cmdline as tab %s", cmd_line)
+        logger.debug("Cmdline: %s" % " ".join(cmd_line))
         return cmd_line
 
     def redirect_streamout(self):
         if not self.config.streamout:
             return None
-        # make output file name, more uniq
+        # make output filename more uniq
         if self.config.streamout.endswith("$$"):
             basename = self.config.streamout[:-2]
             suffix = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -181,7 +187,7 @@ class JLauncher:
         
     def run(self):
         if self.is_running():
-            print("Proc allready running")
+            logger.warn("Proc already running!")
             return None
 
         cmd = self.build_command()
@@ -193,11 +199,12 @@ class JLauncher:
                     stdout=out_file, stderr=subprocess.STDOUT)
             else:
                 self.proc_handle = subprocess.Popen(cmd)
-        except OSError:
-            print("Failed to run proc")
+        except OSError as e:
+            print("Failed to run proc", str(e))
             return None
 
-        print("Proc PID %d" % self.proc_handle.pid)
+        logger.info("Proc %s PID %d" %
+            (self.proc_handle.args[0], self.proc_handle.pid))
         return self.proc_handle.pid
 
     def stop(self):
@@ -219,49 +226,67 @@ class JLauncher:
 
 class ProcessManager:
 
-    def __init__(self, work_dir, config_file="services.yaml"):
+    def __init__(self, work_dir, config_file="services.yaml", init_logging=False, logging_conf="logging.conf"):
         os.chdir(work_dir)
         self.curr_dir = os.getcwd()
         self.service_config_file = config_file
         self.services_registry = {}
+        if init_logging:
+            self._init_logging(logging_conf)
+        logger.info("Initialing from [%s] in workdir: [%s]" % (self.service_config_file, self.curr_dir))
         self._configure()
+        logger.info("Now ready for bussiness!")
+        
 
     def _configure(self):
         self.conf = Config()
         self.conf.parse_yaml(self.service_config_file)
+        logger.info("Found services config in file [%s]" % self.service_config_file )
         for serv in self.conf.service_list():
-            # maybe in future support others then Java, plug here!
-            java_config = self.conf.java_config(serv)
-            java_launcher = JLauncher(java_config)
-            # registry by service name
-            self.services_registry[serv] = java_launcher
+            # maybe in future support others then Java, if so plug it here!
+            try:
+                java_config = self.conf.java_config(serv)
+                java_launcher = JLauncher(java_config)
+                # registry by service name
+                self.services_registry[serv] = java_launcher
+                logger.info("Service [%s] bound to registry", serv)
+            except InvalidConfigException as e:
+                logger.error("Service [%s] init failed!, error: %s", serv, str(e))
+
+    def _init_logging(self,logging_conf):
+        logging.config.fileConfig(logging_conf)
+        logger.info("Logging enabled, config=%s" % logging_conf)
 
     def list(self):
-        return self.conf.service_list()
+        return list(self.services_registry.keys())
 
     def start(self, service_name):
         if not service_name in self.services_registry:
             return None
+        logger.info("Starting service [%s]" % service_name)
         return self.services_registry[service_name].run()
 
     def stop(self, service_name):
         if not service_name in self.services_registry:
             return None
+        logger.info("Stopping service [%s]" % service_name)
         return self.services_registry[service_name].stop()
 
     def status(self, service_name):
         if not service_name in self.services_registry:
             return None
+        logger.info("Checking status of service [%s]" % service_name)
         return self.services_registry[service_name].is_running()
       
 
 
 if __name__ == "__main__":
     
-    proc_man = ProcessManager(os.getcwd())
-    print(proc_man.list())
+    proc_man = ProcessManager(os.getcwd(),init_logging=True)
+    print("Service list:", proc_man.list())
 
-    proc_man.start('echo')
+    pid = proc_man.start('echo')
+    print("echo PID %s" % pid)
     import time
     time.sleep(10)
     print("Is running? ", proc_man.status('echo'))
