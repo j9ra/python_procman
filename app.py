@@ -69,4 +69,7 @@ def service_manager():
         return {"services": proc_man.list()}
     
 
+@app.errorhandler(Exception)
+def special_exception_handler(error):
+    return 'Ur request made server to cry ;(', 500
 
