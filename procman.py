@@ -8,6 +8,7 @@ import datetime
 import subprocess
 import logging
 import logging.config
+import zipfile
 
 logger = logging.getLogger('procman')
 
@@ -77,6 +78,7 @@ class JavaConfig(Config):
                 self.validators[p](self.params[p])
             else:
                 logger.warn("unrecognized config param [%s]", p)
+        self._check_pom_duplicates(self.classpath)
 
     def _check_required(self):
         for r in ('classpath','main'):
@@ -122,6 +124,45 @@ class JavaConfig(Config):
     def _check_streamout(self, value):
         if os.path.isfile(value) and not os.access(value,os.W_OK):
             raise InvalidConfigException("Streamout not writeable: [%s]" % value)
+    
+    def _check_pom_duplicates(self, classpath):
+        pom_artifacts = {}
+        for cp in classpath:
+            pom_file = self._jar_extract_pom(cp)
+            if pom_file:
+                pom_props = self._properties_parse(pom_file)
+                key = (pom_props["groupId"], pom_props["artifactId"])
+                val = {"file": cp, "version": pom_props["version"]}
+                if key in pom_artifacts:
+                    pom_artifacts[key].append(val)
+                else:
+                    pom_artifacts[key] = [val]
+        # check duplicates
+        for group,arti in pom_artifacts.keys():
+            files = pom_artifacts[(group,arti)]
+            if len(files) > 1: # found dups
+                logger.warn("Found classpath artifact duplicates for group: %s, artifact: %s, files: %s", group, arti, files)
+
+
+    def _jar_extract_pom(self, jar_filename, properties_file = "pom.properties", encoding = "utf-8"):
+        properties = None
+        archive = zipfile.ZipFile(jar_filename, 'r')
+        for i in archive.infolist():
+            if i.filename.endswith(properties_file):
+                content = archive.read(i.filename)
+                properties = content.decode(encoding)
+        return properties
+    
+    def _properties_parse(self, multiline_text,sep='=', comment_char='#'):
+        props = {}
+        for line in multiline_text.splitlines():
+            l = line.strip()
+            if l and not l.startswith(comment_char):
+                key_value = l.split(sep)
+                key = key_value[0].strip()
+                value = sep.join(key_value[1:]).strip().strip('"') 
+                props[key] = value 
+        return props
     
 class InvalidConfigException(Exception):
     pass
