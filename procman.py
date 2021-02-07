@@ -68,6 +68,7 @@ class JavaConfig(Config):
         return cp_tab
 
     def __getattr__(self, item):
+        logger.debug("Param get %s, value %s", item, self.params.get(item))
         return self.params.get(item)
 
     def validated(self):
@@ -182,12 +183,13 @@ class JLauncher:
         if self.config.debug == True:
             cmd_line.append("-agentlib:jdwp=transport=dt_socket,server=y,suspend=y")
         # memory
-        if "min" in self.config.memory:
-            cmd_line.append("-Xms%s" % self.config.memory.get("min"))
-        if "max" in self.config.memory:
-            cmd_line.append("-Xmx%s" % self.config.memory.get("max"))
-        if "meta" in self.config.memory:
-            cmd_line.append("-XX:MaxMetaspaceSize=%s" % self.config.memory.get("meta"))
+        if self.config.memory:
+            if "min" in self.config.memory:
+                cmd_line.append("-Xms%s" % self.config.memory.get("min"))
+            if "max" in self.config.memory:
+                cmd_line.append("-Xmx%s" % self.config.memory.get("max"))
+            if "meta" in self.config.memory:
+                cmd_line.append("-XX:MaxMetaspaceSize=%s" % self.config.memory.get("meta"))
         # gc
         if self.config.gc == "serial":
             cmd_line.append("-XX:+UseSerialGC")
@@ -198,16 +200,18 @@ class JLauncher:
         elif self.config.gc == "g1":
             cmd_line.append("-XX:+UseG1GC")
         # sysprops
-        for p in self.config.sysprops:
-            cmd_line.append("-D%s" % p)
+        if self.config.sysprops:
+            for p in self.config.sysprops:
+                cmd_line.append("-D%s" % p)
         # classpath, must be 2 seperate args!
         cmd_line.append("-classpath")
         cmd_line.append(os.pathsep.join(self.config.classpath))
         # main
         cmd_line.append(self.config.main)
         # args
-        for a in self.config.args:
-            cmd_line.append(a)
+        if self.config.args:
+            for a in self.config.args:
+                cmd_line.append(a)
 
         logger.debug("cmdline as tab %s", cmd_line)
         logger.debug("Cmdline: %s" % " ".join(cmd_line))
@@ -224,6 +228,7 @@ class JLauncher:
         else:
             filename = self.config.streamout
         self.stream_out = open(filename, mode="a")
+        logger.info("Redirecting output to file: %s", filename)
         return self.stream_out
         
     def run(self):
@@ -334,5 +339,5 @@ if __name__ == "__main__":
     time.sleep(10)
     print("Stopping")
     print("returncode",proc_man.stop('echo'))
-    print("Stoped")
+    print("Stopped")
     print("Is running? ", proc_man.status('echo'))
