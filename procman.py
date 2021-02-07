@@ -23,7 +23,7 @@ class Config:
                 for doc in docs:
                     self.services[doc["name"]]=doc["procman"]
             except KeyError as exc:
-                print("Not procman Config loaded!") 
+                print("Not Procman Config loaded!") 
                 raise InvalidConfigException("Format error") from exc
 
     def service_list(self):
