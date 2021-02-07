@@ -67,5 +67,7 @@ python -m flask run --host=0.0.0.0
 
 *zarządzanie serwisem*  
 curl -u procman:secret --header "Content-Type: application/json" --request POST --data '{"service":"echo","command":"start"}'  http://localhost:5000/service  
+
 curl -u procman:secret --header "Content-Type: application/json" --request POST --data '{"service":"echo","command":"status"}'  http://localhost:5000/service  
+
 curl -u procman:secret --header "Content-Type: application/json" --request POST --data '{"service":"echo","command":"stop"}'  http://localhost:5000/service  
