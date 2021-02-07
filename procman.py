@@ -324,6 +324,16 @@ class ProcessManager:
         logger.info("Checking status of service [%s]" % service_name)
         return self.services_registry[service_name].is_running()
       
+    def reload(self):
+        runs = []
+        for s in self.list():
+            if self.status(s) == True:
+                runs.append(s)
+        if not runs:
+            logger.info("Reloading configuration")
+            self._configure()
+        else:
+            logger.warn("Services %s in running state, please stop them first!", runs)
 
 
 if __name__ == "__main__":

@@ -29,7 +29,10 @@ Procesów do zarządzania, może być wiele, tyle ile definicji w pliku konfigur
 
 ***
 
-### Plik konfiguracyjny
+### Plik konfiguracyjny services.xml
+
+Plik zawiera konfiguracje dla wybranego procesu java
+
 ```
 # Nazwa serwisu
 name: service_name
@@ -37,37 +40,85 @@ name: service_name
 # Parametry 
 procman:
   java:
+    # Ścieżka do JVM (opcjonalny)
     vmpath: /path/to/java_binary
+    # Uruchomienie debug-era (opcjonalny)
     debug: true/false
+    # Ustawienie pamieci dla JVM (opcjonalny)
     memory:
       min: 1234k/m/g
       max: 1234k/m/g
       meta: 1234k/m/g
+    # Ustawienie typu Garbage Collectora (opcjonalny)
     gc: serial/parallel/cms/g1
+    # Wskazanie plików JAR lub katalogów (obowiązkowy)
     classpath: 
       - path
       - path*
       - jar
+    # Ustawienie parametrów systemowych JVM (opcjonalny)
     sysprops:
       - pl.grabojan.test=true
       - java.awt.headless=true
+    # Wskazanie klasy startowej (obowiązkowy)
     main: some.main.class.Main
+    # Argumenty przekazane do programu
     args: [a,b,c,d]
-    streamout: /path/to/dir
+    # Przekierowanie wyjścia do pliku (opcjonalny)
+    streamout: /path/to/dir$$
 ```
+
+Parametr classpath przyjmuje symbole wieloznaczne (*,?,[]) do budowania listy plików/katalogów
+Parametr streamout może zawierać na końcu dwa znaki $$ oznaczajace, że do ścieżki zostanie doklejony znacznik czasu.
+
 
 ***
 
 ### TEST 
 
+*konfiguracja pliku services.xml*
+Plik konfiguracyjny musi zawierać definicje parametrów
+
 *uruchomienie flask*  
+
 export PROCMAN_USER=procman  
 export PROCMAN_PASSWORD=secret  
-python -m flask run --host=0.0.0.0  
+python -m flask run --host=0.0.0.0   
+
+_w zmiennych PROCMAN_USER i PROCMAN_PASSWORD wskazujemy dane użytkownika uprawnionego do wysyłania żądań do kontrolera aplikacji Flask_  
 
 *zarządzanie serwisem*  
+- uruchomienie
+```
 curl -u procman:secret --header "Content-Type: application/json" --request POST --data '{"service":"echo","command":"start"}'  http://localhost:5000/service  
-
+```
+- sprawdzenie statusu
+```
 curl -u procman:secret --header "Content-Type: application/json" --request POST --data '{"service":"echo","command":"status"}'  http://localhost:5000/service  
+```
 
+- zatrzymanie
+```
 curl -u procman:secret --header "Content-Type: application/json" --request POST --data '{"service":"echo","command":"stop"}'  http://localhost:5000/service  
+```
+
+- przeładowanie konfiguracji
+```
+curl -u procman:secret http://localhost:5000/reload
+```
+
+- lista serwisow
+```
+curl -u procman:secret http://localhost:5000/service
+```
+
+### Przykładowe aplikacja Java
+
+W repozytorium znajduja sie dwie aplikacje
+- camel-echo - serwis typu echo słuchający na porcie 9998/tcp, w katalogu java_lib/java_app
+- batch - program dzialajacy w tle wypisujacy wartosc swojego argumentu na wyście, w katalogu java_test (przykład specjalnie zawiera duplikat biblioteki JAR)
+
+Obie usługi są dostępne do zarządzania przez Flask:
+```
+{"services":["echo","batch"]}
+```

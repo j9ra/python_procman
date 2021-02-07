@@ -21,3 +21,17 @@ procman:
     #args: ['a']
     streamout: /tmp/out$$
      
+---
+# Nazwa serwisu
+name: batch
+
+# Parametry 
+procman:
+  java:
+    vmpath: /usr/bin/java
+    gc: g1
+    classpath: 
+      - java_test/*
+    main: program1.Main
+    args: ['a']
+    streamout: /tmp/batch_out$$

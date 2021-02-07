@@ -69,6 +69,12 @@ def service_manager():
         return {"services": proc_man.list()}
     
 
+@app.route("/reload", methods=["GET"])
+@login_required
+def service_reload():
+    proc_man.reload()
+    return "Reloading"
+
 @app.errorhandler(Exception)
 def special_exception_handler(error):
     return 'Ur request made server to cry ;(', 500
